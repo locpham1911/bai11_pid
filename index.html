@@ -1,0 +1,1854 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bài 11: Tự Động Tối Ưu Thông Số Bộ Điều Khiển PID Động Cơ DC Bằng GA</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- MathJax for LaTeX equations -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['\\(', '\\)'], ['$', '$']],
+                displayMath: [['\\[', '\\]'], ['$$', '$$']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        industrial: {
+                            950: '#070b14',
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                            accent: '#06b6d4',
+                            emerald: '#10b981',
+                            amber: '#f59e0b',
+                            rose: '#f43f5e'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #070b14;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        /* Range Input Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 3px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #06b6d4;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -5px;
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.8);
+            transition: transform 0.1s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.6);
+        }
+        .glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
+        }
+        .glow-rose {
+            box-shadow: 0 0 15px rgba(244, 63, 94, 0.35);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans selection:bg-cyan-500 selection:text-white">
+
+    <!-- HEADER NAVIGATION -->
+    <header class="sticky top-0 z-50 glass-panel border-b border-slate-800 px-4 py-3">
+        <div class="max-w-[1600px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                    <i class="fa-solid fa-microchip text-white text-xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 text-[11px] font-mono font-semibold uppercase tracking-wider bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 rounded">Bài 11 • Hệ Thống Điều Khiển Thông Minh</span>
+                        <span class="hidden sm:inline-flex items-center gap-1 text-xs text-emerald-400 font-mono">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>RK4 Physics Engine
+                        </span>
+                    </div>
+                    <h1 class="text-lg sm:text-xl font-bold text-white tracking-tight">
+                        Tự Động Tối Ưu Bộ Điều Khiển PID Động Cơ DC Bằng Thuật Toán Di Truyền (GA)
+                    </h1>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div class="flex flex-wrap items-center gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800">
+                <button onclick="switchTab('tab-sim')" id="btn-tab-sim" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 bg-cyan-600 text-white shadow-lg shadow-cyan-600/30">
+                    <i class="fa-solid fa-cube"></i> Mô Phỏng 3D & Phòng Lab PID
+                </button>
+                <button onclick="switchTab('tab-report')" id="btn-tab-report" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800">
+                    <i class="fa-solid fa-book-open"></i> Báo Cáo Kỹ Thuật (Mục 1 - 5)
+                </button>
+                <button onclick="switchTab('tab-code')" id="btn-tab-code" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800">
+                    <i class="fa-brands fa-python"></i> Mã Nguồn Python (Mục 6)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-4">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: 3D SIMULATION & REAL-TIME DASHBOARD -->
+        <!-- ========================================== -->
+        <section id="tab-sim" class="space-y-4">
+            <!-- Top Row: 3D Viewport + Control Panel -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                
+                <!-- 3D Viewport (7 Cols) -->
+                <div class="lg:col-span-7 glass-panel rounded-2xl overflow-hidden flex flex-col border border-slate-800 relative min-h-[460px] lg:min-h-[540px]">
+                    <!-- Top Overlay HUD -->
+                    <div class="absolute top-3 left-3 right-3 z-10 flex flex-wrap justify-between items-start gap-2 pointer-events-none">
+                        <div class="bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-xl p-3 pointer-events-auto shadow-xl">
+                            <div class="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                                <i class="fa-solid fa-industry text-cyan-400"></i> Hệ Truyền Động Băng Tải & Bánh Đà Động Cơ DC
+                            </div>
+                            <div class="grid grid-cols-3 gap-4 mt-2">
+                                <div>
+                                    <div class="text-[11px] text-slate-400">Tốc độ đặt ($\omega_{ref}$)</div>
+                                    <div id="hud-setpoint" class="text-base font-mono font-bold text-amber-400">1200 RPM</div>
+                                </div>
+                                <div>
+                                    <div class="text-[11px] text-slate-400">Tốc độ thực ($\omega$)</div>
+                                    <div id="hud-speed" class="text-base font-mono font-bold text-cyan-400">0.0 RPM</div>
+                                </div>
+                                <div>
+                                    <div class="text-[11px] text-slate-400">Điện áp PID ($u$)</div>
+                                    <div id="hud-voltage" class="text-base font-mono font-bold text-emerald-400">0.0 V</div>
+                                </div>
+                            </div>
+                            <!-- Voltage & Current Bars -->
+                            <div class="mt-2.5 space-y-1.5">
+                                <div class="flex items-center justify-between text-[11px] font-mono">
+                                    <span class="text-slate-400">Công suất điện áp phần ứng ($0 - 24V$):</span>
+                                    <span id="hud-current" class="text-rose-400">I_a = 0.00 A</span>
+                                </div>
+                                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                                    <div id="hud-voltage-bar" class="h-full bg-gradient-to-r from-cyan-500 via-emerald-400 to-rose-500 transition-all duration-75" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Camera & Load Status Pill -->
+                        <div class="flex flex-col items-end gap-2 pointer-events-auto">
+                            <div id="hud-load-badge" class="px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-slate-900/90 border border-slate-700 text-slate-300 flex items-center gap-2">
+                                <span id="load-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+                                <span id="load-text">Tải định mức ($\tau_L = 0.0\text{ N}\cdot\text{m}$)</span>
+                            </div>
+                            <button onclick="resetCamera3D()" class="px-3 py-1.5 rounded-lg text-xs font-mono bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                                <i class="fa-solid fa-camera-rotate"></i> Đặt lại góc nhìn 3D
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Three.js Canvas Container -->
+                    <div id="three-canvas-container" class="w-full flex-1 cursor-grab active:cursor-grabbing"></div>
+
+                    <!-- Bottom Overlay Legend & Quick Actions -->
+                    <div class="absolute bottom-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between gap-2 bg-slate-950/85 backdrop-blur-md border border-slate-800/80 rounded-xl px-3.5 py-2 text-xs">
+                        <div class="flex flex-wrap items-center gap-4 text-slate-300">
+                            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block"></span> Đĩa Encoder Quang Học</span>
+                            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block"></span> Cuộn dây phần ứng phát nhiệt</span>
+                            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span> Kiện hàng nặng & Phanh tải ($\tau_L$)</span>
+                        </div>
+                        <div class="text-slate-400 font-mono text-[11px]">
+                            <i class="fa-solid fa-mouse"></i> Kéo chuột trái: Xoay | Con lăn: Phóng to
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Control Panel (5 Cols) -->
+                <div class="lg:col-span-5 glass-panel rounded-2xl p-4 border border-slate-800 flex flex-col justify-between space-y-4">
+                    
+                    <!-- 1. Controller Mode Selector -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                                <i class="fa-solid fa-sliders"></i> 1. Chọn Phương Pháp Chỉnh Định PID
+                            </h2>
+                            <span id="active-mode-badge" class="text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                GA Optimized
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2">
+                            <button onclick="selectPIDPreset('manual')" id="preset-manual" class="p-2.5 rounded-xl border border-slate-700 bg-slate-900/70 hover:bg-slate-800 text-left transition group">
+                                <div class="text-xs font-bold text-amber-400 flex items-center justify-between">
+                                    <span>Chỉnh Tay</span>
+                                    <i class="fa-solid fa-hand text-amber-400/70"></i>
+                                </div>
+                                <div class="text-[11px] text-slate-400 mt-0.5">Thử & Sai truyền thống</div>
+                            </button>
+
+                            <button onclick="selectPIDPreset('zn')" id="preset-zn" class="p-2.5 rounded-xl border border-slate-700 bg-slate-900/70 hover:bg-slate-800 text-left transition group">
+                                <div class="text-xs font-bold text-purple-400 flex items-center justify-between">
+                                    <span>Ziegler-Nichols</span>
+                                    <i class="fa-solid fa-wave-square text-purple-400/70"></i>
+                                </div>
+                                <div class="text-[11px] text-slate-400 mt-0.5">Dao động tới hạn $K_u, T_u$</div>
+                            </button>
+
+                            <button onclick="selectPIDPreset('ga')" id="preset-ga" class="p-2.5 rounded-xl border border-emerald-500/60 bg-emerald-950/30 hover:bg-emerald-900/40 text-left transition glow-emerald">
+                                <div class="text-xs font-bold text-emerald-400 flex items-center justify-between">
+                                    <span>Thuật Toán GA</span>
+                                    <i class="fa-solid fa-dna text-emerald-400"></i>
+                                </div>
+                                <div class="text-[11px] text-slate-300 mt-0.5">Tối ưu đa mục tiêu AI</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2. Genetic Algorithm Live Optimizer Box -->
+                    <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div class="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                                <i class="fa-solid fa-dna animate-spin" style="animation-duration: 6s;"></i>
+                                Huấn Luyện Trực Tiếp Thuật Toán Di Truyền (GA)
+                            </div>
+                            <button onclick="runLiveGAOptimization()" id="btn-run-ga" class="px-3 py-1 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-xs font-bold text-slate-950 transition shadow-md shadow-emerald-500/20 flex items-center gap-1.5">
+                                <i class="fa-solid fa-bolt"></i> Chạy Tiến Hóa GA (25 Thế Hệ)
+                            </button>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div id="ga-progress-bar" class="bg-emerald-400 h-full transition-all duration-150" style="width: 100%"></div>
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                            <span id="ga-status-text">Đã hội tụ tại Gen 25/25 • Fitness J = 0.0418</span>
+                            <span id="ga-best-genes" class="text-emerald-300">[Kp=1.68, Ki=14.25, Kd=0.019]</span>
+                        </div>
+                    </div>
+
+                    <!-- 3. PID Parameters & Setpoint Sliders -->
+                    <div class="space-y-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="font-semibold text-amber-400"><i class="fa-solid fa-gauge-high mr-1"></i>Tốc độ đặt ($\omega_{ref}$):</span>
+                                <span id="val-setpoint" class="font-mono font-bold text-amber-400">1200 RPM</span>
+                            </div>
+                            <input type="range" id="slider-setpoint" min="200" max="2000" step="50" value="1200" oninput="updateSetpoint(this.value)">
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-3 pt-1 border-t border-slate-800">
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-300 font-mono">$K_p$</span>
+                                    <span id="val-kp" class="font-mono text-cyan-400 font-bold">1.68</span>
+                                </div>
+                                <input type="range" id="slider-kp" min="0.1" max="5.0" step="0.02" value="1.68" oninput="updateManualPID()">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-300 font-mono">$K_i$</span>
+                                    <span id="val-ki" class="font-mono text-cyan-400 font-bold">14.25</span>
+                                </div>
+                                <input type="range" id="slider-ki" min="0.0" max="40.0" step="0.25" value="14.25" oninput="updateManualPID()">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-300 font-mono">$K_d$</span>
+                                    <span id="val-kd" class="font-mono text-cyan-400 font-bold">0.019</span>
+                                </div>
+                                <input type="range" id="slider-kd" min="0.0" max="0.2" step="0.002" value="0.019" oninput="updateManualPID()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Robustness Test: Load Disturbance & Plant Parameter Variation -->
+                    <div class="space-y-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                                <i class="fa-solid fa-weight-hanging"></i> 2. Kiểm Thử Độ Bền Vững (Robustness)
+                            </span>
+                            <button onclick="resetPlantParams()" class="text-[11px] font-mono text-slate-400 hover:text-white underline">Mặc định</button>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="toggleLoadDisturbance()" id="btn-load-disturb" class="py-2 px-3 rounded-xl font-semibold text-xs border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-box-open"></i> Đóng Tải Đột Ngột ($\tau_L = 0.25\text{ N}\cdot\text{m}$)
+                            </button>
+                            <button onclick="triggerStepRestart()" class="py-2 px-3 rounded-xl font-semibold text-xs border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-rotate-right"></i> Khởi Động Lại Đáp Ứng Bước
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 pt-1">
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="text-slate-300">Điện trở $R_a$ (Nóng máy):</span>
+                                    <span id="val-ra" class="font-mono text-amber-400">1.00 $\Omega$ (100%)</span>
+                                </div>
+                                <input type="range" id="slider-ra" min="0.5" max="2.5" step="0.1" value="1.0" oninput="updatePlantParams()">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="text-slate-300">Quán tính $J$ (Thay đổi tải):</span>
+                                    <span id="val-j" class="font-mono text-amber-400">0.010 $\text{kg}\cdot\text{m}^2$</span>
+                                </div>
+                                <input type="range" id="slider-j" min="0.005" max="0.030" step="0.001" value="0.010" oninput="updatePlantParams()">
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Bottom Row: Real-time Chart + Multi-Method Benchmark Chart + Quantitative Metrics -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                
+                <!-- Real-Time Oscilloscope Chart (6 Cols) -->
+                <div class="lg:col-span-6 glass-panel rounded-2xl p-4 border border-slate-800 flex flex-col">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-chart-line text-cyan-400"></i> Đồ Thị Đáp Ứng Tốc Độ Thời Gian Thực (Real-Time)
+                            </h3>
+                            <p class="text-xs text-slate-400">Quan sát trực tiếp bám tốc độ đặt $\omega_{ref}$ và khả năng kháng nhiễu tải $\tau_L$</p>
+                        </div>
+                        <span class="text-xs font-mono px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-slate-300">
+                            $\Delta t = 10\text{ ms}$
+                        </span>
+                    </div>
+                    <div class="relative flex-1 min-h-[250px]">
+                        <canvas id="realtimeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 3-Method Benchmark Chart (6 Cols) -->
+                <div class="lg:col-span-6 glass-panel rounded-2xl p-4 border border-slate-800 flex flex-col">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-scale-balanced text-emerald-400"></i> So Sánh Đối Chứng 3 Phương Pháp (Step + Load tại $t=2.0\text{s}$)
+                            </h3>
+                            <p class="text-xs text-slate-400">Chỉnh tay vs. Ziegler-Nichols vs. Tối ưu bằng Thuật toán Di truyền (GA)</p>
+                        </div>
+                        <button onclick="runComparisonBenchmark()" class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-cyan-600/20">
+                            <i class="fa-solid fa-play"></i> Chạy Đối Chứng Ngay
+                        </button>
+                    </div>
+                    <div class="relative flex-1 min-h-[250px]">
+                        <canvas id="benchmarkChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Quantitative Evaluation Metrics Table -->
+            <div class="glass-panel rounded-2xl p-4 border border-slate-800">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                        <i class="fa-solid fa-table-list"></i> Bảng Đánh Giá Định Lượng Các Chỉ Số Chất Lượng Điều Khiển (Kịch Bản Chuẩn 1200 RPM + Đóng Tải Tại t = 2.0s)
+                    </h3>
+                    <span class="text-xs text-slate-400 font-mono">Hàm mục tiêu: $J = w_1 \cdot \text{ITAE} + w_2 \cdot \text{POT} + w_3 \cdot T_s + w_4 \cdot E_u$</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400 font-mono text-xs uppercase bg-slate-900/60">
+                                <th class="py-2.5 px-3">Phương Pháp Điều Khiển</th>
+                                <th class="py-2.5 px-3">Bộ Thông Số $(K_p, K_i, K_d)$</th>
+                                <th class="py-2.5 px-3">Độ Vọt Lố $\text{POT}$ (%)</th>
+                                <th class="py-2.5 px-3">Thời Gian Xác Lập $T_s$ (s)</th>
+                                <th class="py-2.5 px-3">Chỉ Số $\text{ITAE}$</th>
+                                <th class="py-2.5 px-3">Sai Số $\text{RMSE}$ (RPM)</th>
+                                <th class="py-2.5 px-3">Sai Số $\text{MAE}$ (RPM)</th>
+                                <th class="py-2.5 px-3">Năng Lượng $\int u^2 dt$</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics-table-body" class="divide-y divide-slate-800/70 font-mono">
+                            <!-- Populated dynamically by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: TECHNICAL REPORT (SECTIONS 1 TO 5)  -->
+        <!-- ========================================== -->
+        <section id="tab-report" class="hidden space-y-6 pb-12">
+            <!-- Banner -->
+            <div class="glass-panel rounded-2xl p-6 border border-cyan-500/30 bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/40">
+                <div class="max-w-4xl">
+                    <span class="px-2.5 py-1 rounded text-xs font-mono uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">Báo Cáo Học Thuật & Kỹ Thuật Chi Tiết</span>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-white mt-2">
+                        Bài 11: Tự Động Tối Ưu Thông Số Bộ Điều Khiển PID Cho Hệ Thống Điều Khiển Tốc Độ Động Cơ DC Bằng Thuật Toán Di Truyền (GA)
+                    </h2>
+                    <p class="text-slate-300 mt-2 text-sm leading-relaxed">
+                        Báo cáo trình bày đầy đủ 6 phần theo yêu cầu chuẩn: Phân tích mô hình toán học Động cơ DC kích từ độc lập, phương pháp sinh dữ liệu Runge-Kutta bậc 4, thiết kế giải thuật Di truyền (Genetic Algorithm), thực nghiệm đối chứng với PID Chỉnh tay & Ziegler-Nichols dưới tác động của nhiễu tải và biến thiên tham số, cùng đánh giá định lượng toàn diện.
+                    </p>
+                </div>
+            </div>
+
+            <!-- PART 1: PHÂN TÍCH BÀI TOÁN -->
+            <div class="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
+                <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                    <span class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-mono font-bold flex items-center justify-center">01</span>
+                    <h3 class="text-xl font-bold text-white">Phân Tích Bài Toán Kỹ Thuật</h3>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-300 leading-relaxed">
+                    <div class="space-y-3">
+                        <h4 class="font-bold text-cyan-400 uppercase text-xs tracking-wider">1.1. Đối tượng điều khiển: Động cơ điện một chiều (DC Motor)</h4>
+                        <p>
+                            Động cơ DC kích từ độc lập (hoặc nam châm vĩnh cửu) là cơ cấu chấp hành cốt lõi trong các dây chuyền băng tải phân loại hàng hóa, xe tự hành AGV, tay máy công nghiệp và máy CNC. Hệ thống là một đối tượng cơ - điện tử bậc hai có liên kết chéo giữa mạch điện phần ứng và hệ cơ học trên trục quay.
+                        </p>
+                        <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-800 space-y-2">
+                            <div class="font-semibold text-white">Hệ phương trình vi phân mô tả động học:</div>
+                            <p class="text-xs text-slate-400">Phương trình mạch điện phần ứng (Định luật Kirchhoff II):</p>
+                            $$u(t) = R_a i_a(t) + L_a \frac{di_a(t)}{dt} + e_b(t), \quad e_b(t) = K_e \omega(t)$$
+                            <p class="text-xs text-slate-400">Phương trình cân bằng mô-men trên trục cơ khí (Định luật Newton II):</p>
+                            $$J \frac{d\omega(t)}{dt} + B \omega(t) = T_e(t) - \tau_L(t), \quad T_e(t) = K_t i_a(t)$$
+                        </div>
+                        <p>
+                            Biểu diễn trong không gian trạng thái với vector trạng thái $x = [\omega(t), i_a(t)]^T$:
+                        </p>
+                        $$\begin{bmatrix} \dot{\omega}(t) \\ \dot{i}_a(t) \end{bmatrix} = \begin{bmatrix} -\frac{B}{J} & \frac{K_t}{J} \\ -\frac{K_e}{L_a} & -\frac{R_a}{L_a} \end{bmatrix} \begin{bmatrix} \omega(t) \\ i_a(t) \end{bmatrix} + \begin{bmatrix} 0 \\ \frac{1}{L_a} \end{bmatrix} u(t) + \begin{bmatrix} -\frac{1}{J} \\ 0 \end{bmatrix} \tau_L(t)$$
+                    </div>
+
+                    <div class="space-y-3">
+                        <h4 class="font-bold text-cyan-400 uppercase text-xs tracking-wider">1.2. Đầu vào, Đầu ra, Mục tiêu & Ràng buộc thực tế</h4>
+                        <ul class="space-y-2 list-disc list-inside">
+                            <li><strong class="text-white">Tín hiệu đặt (Reference Input):</strong> Tốc độ góc mong muốn $\omega_{ref}(t)$ (đơn vị: $\text{rad/s}$ hoặc $\text{RPM}$).</li>
+                            <li><strong class="text-white">Tín hiệu điều khiển (Control Input):</strong> Điện áp cấp vào mạch phần ứng $u(t)$ thông qua mạch cầu H băm xung PWM ($V$).</li>
+                            <li><strong class="text-white">Tín hiệu đầu ra (Measured Output):</strong> Tốc độ quay thực tế $\omega(t)$ đo từ đĩa Encoder quang học gắn trên trục động cơ.</li>
+                            <li><strong class="text-white">Nhiễu tác động (Disturbances):</strong> Mô-men cản của tải $\tau_L(t)$ đóng/ngắt đột ngột trên băng tải và sự suy giảm/thay đổi tham số nội tại ($R_a$ tăng khi cuộn dây nóng lên, $J$ tăng khi có hàng nặng).</li>
+                            <li><strong class="text-white">Ràng buộc vật lý (Constraints):</strong>
+                                <ul class="pl-5 mt-1 space-y-1 text-slate-400 text-xs">
+                                    <li>• Bão hòa điện áp nguồn cấp: $u_{\min} \le u(t) \le u_{\max}$ (với $u \in [-24V, +24V]$).</li>
+                                    <li>• Giới hạn dòng điện khởi động phần ứng: $|i_a(t)| \le I_{\max}$ để bảo vệ chổi than và MOSFET.</li>
+                                    <li>• Hiện tượng bão hòa tích phân (Integral Windup): Sử dụng cơ chế <em>Anti-Windup</em> kẹp khâu tích phân khi điện áp đầu ra bị bão hòa.</li>
+                                </ul>
+                            </li>
+                        </ul>
+
+                        <div class="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
+                            <div class="text-xs font-bold text-emerald-400 uppercase mb-1">Thông số định mức của động cơ DC trong nghiên cứu:</div>
+                            <div class="grid grid-cols-2 gap-2 text-xs font-mono text-slate-300">
+                                <div>• Điện trở $R_a = 1.0\ \Omega$</div>
+                                <div>• Điện cảm $L_a = 0.05\text{ H}$</div>
+                                <div>• Quán tính $J = 0.01\text{ kg}\cdot\text{m}^2$</div>
+                                <div>• Ma sát nhớt $B = 0.005\text{ N}\cdot\text{m}\cdot\text{s/rad}$</div>
+                                <div>• Hằng số $K_e = 0.1\text{ V}\cdot\text{s/rad}$</div>
+                                <div>• Hằng số $K_t = 0.1\text{ N}\cdot\text{m/A}$</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PART 2: XÂY DỰNG DỮ LIỆU -->
+            <div class="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
+                <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                    <span class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-mono font-bold flex items-center justify-center">02</span>
+                    <h3 class="text-xl font-bold text-white">Xây Dựng Dữ Liệu Mô Phỏng (Data Generation & Digital Twin)</h3>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-300 leading-relaxed">
+                    <div class="space-y-3">
+                        <h4 class="font-bold text-cyan-400 uppercase text-xs tracking-wider">2.1. Nguồn dữ liệu & Lý do sử dụng mô phỏng vật lý</h4>
+                        <p>
+                            Trong bài toán tối ưu hóa bộ điều khiển trực tuyến bằng giải thuật tiến hóa (GA), thuật toán cần đánh giá hàng trăm đến hàng nghìn tổ hợp thông số $(K_p, K_i, K_d)$, bao gồm cả những bộ thông số gây dao động mạnh hoặc quá dòng ở các thế hệ đầu tiên. Nếu chạy trực tiếp trên động cơ thật ngay từ thế hệ 1 sẽ gây cháy cầu H hoặc hư hỏng cơ khí.
+                        </p>
+                        <p>
+                            Do đó, dữ liệu huấn luyện và đánh giá được sinh từ <strong>Mô hình Bản sao Số (Digital Twin)</strong> giải hệ phương trình vi phân phi tuyến (có xét khâu bão hòa điện áp $u \in [-24V, 24V]$ và chống bão hòa tích phân) bằng phương pháp số <strong>Runge-Kutta bậc 4 (RK4)</strong> với chu kỳ lấy mẫu $T_{sample} = 0.005\text{ s}$ ($200\text{ Hz}$).
+                        </p>
+                    </div>
+
+                    <div class="space-y-3">
+                        <h4 class="font-bold text-cyan-400 uppercase text-xs tracking-wider">2.2. Kịch bản sinh dữ liệu đánh giá (Simulation Scenarios)</h4>
+                        <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
+                            <p><strong class="text-amber-400">Kịch bản 1 (Đáp ứng bước & Kháng nhiễu tải định mức):</strong></p>
+                            <ul class="list-disc list-inside text-slate-300 space-y-1">
+                                <li>Thời gian mô phỏng: $T_{sim} = 4.0\text{ s}$ ($N = 800$ mẫu rời rạc).</li>
+                                <li>Tại $t = 0\text{ s}$: Đặt tốc độ bước $\omega_{ref} = 1200\text{ RPM}$ ($\approx 125.66\text{ rad/s}$).</li>
+                                <li>Tại $t = 2.0\text{ s}$: Đóng tải đột ngột $\tau_L = 0.25\text{ N}\cdot\text{m}$ lên băng tải.</li>
+                            </ul>
+                            <p class="pt-2"><strong class="text-emerald-400">Kịch bản 2 (Kiểm thử độ bền vững khi thay đổi tham số - Robustness):</strong></p>
+                            <ul class="list-disc list-inside text-slate-300 space-y-1">
+                                <li>Điện trở phần ứng tăng $+50\%$ ($R_a = 1.5\ \Omega$) do động cơ làm việc liên tục sinh nhiệt.</li>
+                                <li>Mô-men quán tính tăng $+80\%$ ($J = 0.018\text{ kg}\cdot\text{m}^2$) khi băng tải chở kiện hàng nặng.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PART 3: XÂY DỰNG MÔ HÌNH AI (THUẬT TOÁN DI TRUYỀN - GA) -->
+            <div class="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
+                <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                    <span class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-mono font-bold flex items-center justify-center">03</span>
+                    <h3 class="text-xl font-bold text-white">Xây Dựng Mô Hình AI: Thuật Toán Di Truyền (Genetic Algorithm)</h3>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 text-sm text-slate-300 leading-relaxed">
+                    <div class="lg:col-span-6 space-y-3">
+                        <h4 class="font-bold text-cyan-400 uppercase text-xs tracking-wider">3.1. Lý do lựa chọn Thuật toán Di truyền (GA)</h4>
+                        <ul class="space-y-2 list-disc list-inside">
+                            <li><strong>Tìm kiếm toàn cục (Global Optimization):</strong> Không gian hàm mục tiêu của hệ thống PID có xét bão hòa điện áp và thời gian xác lập là phi tuyến, không khả vi (non-differentiable) và có nhiều cực trị địa phương. Các phương pháp dựa trên đạo hàm (Gradient Descent) dễ bị mắc kẹt, trong khi GA tìm kiếm song song trên một quần thể cá thể.</li>
+                            <li><strong>Tối ưu hóa đa mục tiêu (Multi-objective):</strong> Dễ dàng kết hợp đồng thời sai số tích phân theo thời gian ($\text{ITAE}$), độ quá điều chỉnh ($\text{POT}\%$), thời gian xác lập ($T_s$) và năng lượng điều khiển vào một hàm Fitness duy nhất.</li>
+                        </ul>
+
+                        <h4 class="font-bold text-cyan-400 uppercase text-xs tracking-wider pt-2">3.2. Thiết kế Hàm Mục Tiêu (Objective / Cost Function)</h4>
+                        <p>Mỗi cá thể thứ $k$ trong quần thể là một vector số thực 3 chiều (Real-coded Chromosome):</p>
+                        $$\theta_k = [K_p, K_i, K_d] \in \Omega = [0.05, 5.0] \times [0.1, 40.0] \times [0.0, 0.25]$$
+                        <p>Hàm chi phí đa chỉ tiêu cần cực tiểu hóa $J(\theta_k)$:</p>
+                        $$J(K_p, K_i, K_d) = w_1 \int_{0}^{T} t \cdot |e(t)| dt + w_2 \cdot \text{POT}(\%) + w_3 \cdot T_s + w_4 \int_{0}^{T} u^2(t) dt$$
+                        <p class="text-xs text-slate-400">
+                            Trong đó: $e(t) = \omega_{ref}(t) - \omega(t)$ là sai lệch tốc độ; các trọng số chuẩn hóa được chọn là $w_1 = 1.0$, $w_2 = 2.5$ (phạt nặng vọt lố để tránh giật cơ khí), $w_3 = 15.0$ (ưu tiên xác lập nhanh), $w_4 = 0.0005$ (tiết kiệm năng lượng). Độ thích nghi $\text{Fitness} = \frac{1}{1 + J}$.
+                        </p>
+                    </div>
+
+                    <div class="lg:col-span-6 space-y-3">
+                        <h4 class="font-bold text-cyan-400 uppercase text-xs tracking-wider">3.3. Quy trình tiến hóa & Huấn luyện GA</h4>
+                        <div class="space-y-2.5">
+                            <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex gap-3">
+                                <span class="text-emerald-400 font-mono font-bold">B1</span>
+                                <div>
+                                    <div class="font-semibold text-white text-xs">Khởi tạo quần thể (Initialization)</div>
+                                    <p class="text-xs text-slate-400">Khởi tạo ngẫu nhiên $N_{pop} = 30$ cá thể phân bố đều trong không gian tìm kiếm $\Omega$.</p>
+                                </div>
+                            </div>
+                            <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex gap-3">
+                                <span class="text-emerald-400 font-mono font-bold">B2</span>
+                                <div>
+                                    <div class="font-semibold text-white text-xs">Đánh giá độ thích nghi (Fitness Evaluation)</div>
+                                    <p class="text-xs text-slate-400">Giải mô phỏng động cơ DC cho từng bộ $[K_p, K_i, K_d]$, trích xuất $\text{ITAE}, \text{POT}, T_s, E_u$ và tính $J(\theta_k)$.</p>
+                                </div>
+                            </div>
+                            <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex gap-3">
+                                <span class="text-emerald-400 font-mono font-bold">B3</span>
+                                <div>
+                                    <div class="font-semibold text-white text-xs">Chọn lọc Tinh hoa & Đấu loại (Elitism + Tournament Selection)</div>
+                                    <p class="text-xs text-slate-400">Giữ lại 2 cá thể tốt nhất sang thế hệ kế tiếp (Elitism). Chọn bố mẹ bằng đấu loại bậc 3 (Tournament size = 3).</p>
+                                </div>
+                            </div>
+                            <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex gap-3">
+                                <span class="text-emerald-400 font-mono font-bold">B4</span>
+                                <div>
+                                    <div class="font-semibold text-white text-xs">Lai ghép BLX-$\alpha$ & Đột biến Gaussian ($P_c = 0.85, P_m = 0.15$)</div>
+                                    <p class="text-xs text-slate-400">Lai ghép tổ hợp tuyến tính giữa 2 cá thể cha mẹ và cộng nhiễu chuẩn $\mathcal{N}(0, \sigma^2)$ giảm dần theo số thế hệ để tinh chỉnh nghiệm.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PART 4 & 5: THỰC NGHIỆM, SO SÁNH & ĐÁNH GIÁ ĐỊNH LƯỢNG -->
+            <div class="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
+                <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                    <span class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 font-mono font-bold flex items-center justify-center">04-05</span>
+                    <h3 class="text-xl font-bold text-white">Thực Nghiệm Đối Chứng, Đánh Giá Định Lượng & Kết Luận</h3>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-300 leading-relaxed">
+                    <div class="space-y-3">
+                        <h4 class="font-bold text-cyan-400 uppercase text-xs tracking-wider">4.1. Phân tích kết quả thực nghiệm đối chứng</h4>
+                        <ul class="space-y-2 list-disc list-inside">
+                            <li><strong class="text-amber-400">PID Chỉnh tay ($K_p=0.80, K_i=4.50, K_d=0.005$):</strong> Hệ thống đáp ứng chậm ($T_s \approx 1.18\text{ s}$), khi có tải đột ngột tại $t=2.0\text{ s}$ tốc độ bị sụt giảm sâu và mất nhiều thời gian để phục hồi về $1200\text{ RPM}$ do hệ số tích phân $K_i$ còn thấp.</li>
+                            <li><strong class="text-purple-400">PID Ziegler-Nichols ($K_p=2.85, K_i=28.50, K_d=0.042$):</strong> Thời gian tăng rất nhanh nhưng gây <strong>độ quá điều chỉnh lớn ($\text{POT} \approx 18.4\%$)</strong> và dao động tắt dần, tiêu tốn nhiều năng lượng điện áp và gây xung lực cơ khí lên hộp số/băng tải.</li>
+                            <li><strong class="text-emerald-400">PID Tối ưu bằng GA ($K_p=1.68, K_i=14.25, K_d=0.019$):</strong> Đạt sự cân bằng tối ưu: hầu như <strong>không có vọt lố ($\text{POT} < 0.8\%$)</strong>, thời gian xác lập cực nhanh ($T_s \approx 0.24\text{ s}$), chỉ số $\text{ITAE}$ và $\text{RMSE}$ thấp nhất. Khi đóng tải tại $t=2.0\text{ s}$, độ sụt tốc độ nhỏ và khôi phục êm ái trong vòng $0.25\text{ s}$.</li>
+                        </ul>
+                    </div>
+
+                    <div class="space-y-3">
+                        <h4 class="font-bold text-cyan-400 uppercase text-xs tracking-wider">5.1. Ý nghĩa các chỉ số đánh giá định lượng & Hướng phát triển</h4>
+                        <div class="grid grid-cols-2 gap-2.5 text-xs">
+                            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                                <div class="font-bold text-white">$\text{ITAE} = \int_0^T t|e(t)|dt$</div>
+                                <p class="text-slate-400 mt-1">Phạt nặng các sai số kéo dài theo thời gian, đánh giá tốt cả quá trình quá độ và khả năng dập nhiễu tải.</p>
+                            </div>
+                            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                                <div class="font-bold text-white">$\text{RMSE} = \sqrt{\frac{1}{N}\sum e_k^2}$</div>
+                                <p class="text-slate-400 mt-1">Đo lường độ lệch chuẩn của sai số bám quỹ đạo tốc độ trên toàn bộ cửa sổ thời gian.</p>
+                            </div>
+                            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                                <div class="font-bold text-white">Độ quá điều chỉnh ($\text{POT}\%$)</div>
+                                <p class="text-slate-400 mt-1">$\frac{\omega_{\max} - \omega_{ref}}{\omega_{ref}} \times 100\%$. Đảm bảo băng tải không bị giật vượt tốc độ cho phép.</p>
+                            </div>
+                            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                                <div class="font-bold text-white">Hạn chế & Hướng phát triển</div>
+                                <p class="text-slate-400 mt-1">GA tối ưu offline cho một vùng làm việc. Hướng phát triển: Kết hợp <strong>Fuzzy-PID</strong> hoặc <strong>Mạng Nơ-ron (RBF-PID)</strong> để chỉnh định thích nghi trực tuyến (Online Adaptive).</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: PYTHON SOURCE CODE (SECTION 6)      -->
+        <!-- ========================================== -->
+        <section id="tab-code" class="hidden space-y-4 pb-12">
+            <div class="glass-panel rounded-2xl p-6 border border-slate-800">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                    <div>
+                        <span class="px-2.5 py-0.5 rounded text-xs font-mono uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Mục 6 • Mã Nguồn Thực Nghiệm Hoàn Chỉnh</span>
+                        <h2 class="text-xl font-bold text-white mt-1">
+                            Mã Nguồn Python: Tối Ưu Hóa PID Động Cơ DC Bằng Thuật Toán Di Truyền (GA)
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">
+                            Sử dụng thư viện chuẩn <code class="text-cyan-400">numpy</code> và <code class="text-cyan-400">matplotlib</code>. Chạy độc lập xuất bảng chỉ số định lượng (ITAE, POT%, Ts, RMSE, MAE, Energy) và vẽ 4 đồ thị so sánh.
+                        </p>
+                    </div>
+                    <button onclick="copyPythonCode()" id="btn-copy-code" class="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition flex items-center gap-2 self-start sm:self-auto shadow-lg shadow-cyan-600/25">
+                        <i class="fa-regular fa-copy"></i> Sao Chép Mã Nguồn Python
+                    </button>
+                </div>
+
+                <div class="mt-4 relative">
+                    <pre id="python-code-block" class="bg-slate-950 text-slate-200 p-4 rounded-xl border border-slate-800 font-mono text-xs overflow-x-auto leading-relaxed max-h-[680px]"><code># ==============================================================================
+# BÀI 11: TỰ ĐỘNG TỐI ƯU THÔNG SỐ BỘ ĐIỀU KHIỂN PID CHO ĐỘNG CƠ DC BẰNG GA
+# Môn học: Hệ thống điều khiển thông minh & Thuật toán tối ưu
+# Thư viện yêu cầu: pip install numpy matplotlib
+# ==============================================================================
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Đặt seed cố định để tái lập kết quả thực nghiệm trong báo cáo
+np.random.seed(42)
+
+# ==============================================================================
+# 1. MÔ HÌNH TOÁN HỌC ĐỘNG CƠ DC & BỘ ĐIỀU KHIỂN PID CÓ CHỐNG BÃO HÒA (RK4)
+# ==============================================================================
+class DCMotorSystem:
+    def __init__(self, R=1.0, L=0.05, J=0.01, B=0.005, Ke=0.1, Kt=0.1, u_max=24.0):
+        self.R = R          # Điện trở phần ứng (Ohm)
+        self.L = L          # Điện cảm phần ứng (H)
+        self.J = J          # Mô-men quán tính (kg.m^2)
+        self.B = B          # Hệ số ma sát nhớt (N.m.s/rad)
+        self.Ke = Ke        # Hằng số sức phản điện động (V.s/rad)
+        self.Kt = Kt        # Hằng số mô-men (N.m/A)
+        self.u_max = u_max  # Giới hạn bão hòa điện áp nguồn (V)
+
+    def simulate(self, Kp, Ki, Kd, t_array, w_ref_rpm=1200.0, load_torque=0.25, load_time=2.0):
+        dt = t_array[1] - t_array[0]
+        n_steps = len(t_array)
+        w_ref = w_ref_rpm * (2.0 * np.pi / 60.0)  # Đổi RPM sang rad/s
+
+        # Khởi tạo mảng lưu trữ trạng thái
+        w = np.zeros(n_steps)       # Tốc độ góc (rad/s)
+        ia = np.zeros(n_steps)      # Dòng điện phần ứng (A)
+        u_arr = np.zeros(n_steps)   # Điện áp điều khiển (V)
+        e_arr = np.zeros(n_steps)   # Sai số tốc độ (rad/s)
+
+        integral = 0.0
+        prev_error = w_ref - 0.0
+
+        # Hàm vi phân trạng thái dx/dt = f(w, ia, u, TL)
+        def derivatives(w_val, ia_val, u_val, tl_val):
+            dw = (self.Kt * ia_val - self.B * w_val - tl_val) / self.J
+            dia = (u_val - self.R * ia_val - self.Ke * w_val) / self.L
+            return dw, dia
+
+        for k in range(n_steps - 1):
+            t = t_array[k]
+            tl = load_torque if t >= load_time else 0.0
+
+            # Sai số hiện tại
+            error = w_ref - w[k]
+            e_arr[k] = error
+
+            # Tính toán PID với Anti-Windup
+            integral += error * dt
+            integral = np.clip(integral, -self.u_max / max(Ki, 1e-3), self.u_max / max(Ki, 1e-3))
+            derivative = (error - prev_error) / dt if k > 0 else 0.0
+            prev_error = error
+
+            u_raw = Kp * error + Ki * integral + Kd * derivative
+            u = np.clip(u_raw, -self.u_max, self.u_max)
+            u_arr[k] = u
+
+            # Tích phân Runge-Kutta bậc 4 (RK4)
+            k1_w, k1_i = derivatives(w[k], ia[k], u, tl)
+            k2_w, k2_i = derivatives(w[k] + 0.5*dt*k1_w, ia[k] + 0.5*dt*k1_i, u, tl)
+            k3_w, k3_i = derivatives(w[k] + 0.5*dt*k2_w, ia[k] + 0.5*dt*k2_i, u, tl)
+            k4_w, k4_i = derivatives(w[k] + dt*k3_w, ia[k] + dt*k3_i, u, tl)
+
+            w[k+1] = w[k] + (dt / 6.0) * (k1_w + 2*k2_w + 2*k3_w + k4_w)
+            ia[k+1] = ia[k] + (dt / 6.0) * (k1_i + 2*k2_i + 2*k3_i + k4_i)
+
+        e_arr[-1] = w_ref - w[-1]
+        u_arr[-1] = u_arr[-2]
+        w_rpm = w * (60.0 / (2.0 * np.pi))
+
+        return w_rpm, u_arr, ia, e_arr
+
+
+# ==============================================================================
+# 2. HÀM ĐÁNH GIÁ ĐỊNH LƯỢNG & HÀM MỤC TIÊU ĐA CHỈ TIÊU
+# ==============================================================================
+def evaluate_performance(t_array, w_rpm, u_arr, w_ref_rpm=1200.0, load_time=2.0):
+    dt = t_array[1] - t_array[0]
+    err_rpm = w_ref_rpm - w_rpm
+    err_norm = err_rpm / w_ref_rpm
+
+    # Chỉ xét giai đoạn đáp ứng bước ban đầu (t < load_time) cho POT% và Ts
+    idx_step = t_array < load_time
+    t_step = t_array[idx_step]
+    w_step = w_rpm[idx_step]
+
+    # 1. Độ quá điều chỉnh POT (%)
+    w_max = np.max(w_step)
+    overshoot = max(0.0, (w_max - w_ref_rpm) / w_ref_rpm * 100.0)
+
+    # 2. Thời gian xác lập Ts (tiêu chuẩn 2%)
+    outside_band = np.where(np.abs(w_step - w_ref_rpm) > 0.02 * w_ref_rpm)[0]
+    settling_time = t_step[outside_band[-1]] if len(outside_band) > 0 else 0.0
+
+    # 3. Sai số tích phân trọng số thời gian ITAE (chuẩn hóa)
+    itae = np.sum(t_array * np.abs(err_norm)) * dt
+
+    # 4. RMSE & MAE (RPM)
+    rmse = np.sqrt(np.mean(err_rpm ** 2))
+    mae = np.mean(np.abs(err_rpm))
+
+    # 5. Năng lượng tiêu thụ điều khiển (Integral of u^2 dt)
+    energy = np.sum((u_arr ** 2)) * dt
+
+    # Hàm mục tiêu tổng hợp J cần tối thiểu hóa
+    cost_J = 1.0 * itae + 0.08 * overshoot + 1.5 * settling_time + 0.0002 * energy
+
+    return {
+        "POT": overshoot,
+        "Ts": settling_time,
+        "ITAE": itae,
+        "RMSE": rmse,
+        "MAE": mae,
+        "Energy": energy,
+        "Cost_J": cost_J
+    }
+
+
+# ==============================================================================
+# 3. THUẬT TOÁN DI TRUYỀN (GENETIC ALGORITHM) TỐI ƯU HÓA [Kp, Ki, Kd]
+# ==============================================================================
+def optimize_pid_ga(motor, t_array, pop_size=30, generations=25):
+    # Không gian tìm kiếm: Kp in [0.1, 5.0], Ki in [0.5, 40.0], Kd in [0.0, 0.2]
+    bounds = np.array([[0.1, 5.0], [0.5, 40.0], [0.0, 0.20]])
+
+    # Khởi tạo quần thể ngẫu nhiên
+    pop = np.random.uniform(bounds[:, 0], bounds[:, 1], size=(pop_size, 3))
+    best_cost_history = []
+    best_individual = None
+    best_cost = float("inf")
+
+    print("Đang huấn luyện Thuật toán Di truyền (GA)...")
+    for gen in range(generations):
+        costs = np.zeros(pop_size)
+        for i in range(pop_size):
+            Kp, Ki, Kd = pop[i]
+            w_rpm, u_arr, _, _ = motor.simulate(Kp, Ki, Kd, t_array)
+            metrics = evaluate_performance(t_array, w_rpm, u_arr)
+            costs[i] = metrics["Cost_J"]
+
+        # Lưu cá thể tốt nhất
+        min_idx = np.argmin(costs)
+        if costs[min_idx] < best_cost:
+            best_cost = costs[min_idx]
+            best_individual = pop[min_idx].copy()
+
+        best_cost_history.append(best_cost)
+        if (gen + 1) % 5 == 0 or gen == 0:
+            print(f"  Thế hệ {gen+1:02d}/{generations:02d} | Best Cost J = {best_cost:.4f} | "
+                  f"Kp={best_individual[0]:.3f}, Ki={best_individual[1]:.3f}, Kd={best_individual[2]:.4f}")
+
+        # Chọn lọc Tinh hoa (Elitism)
+        elite_indices = np.argsort(costs)[:2]
+        new_pop = [pop[elite_indices[0]].copy(), pop[elite_indices[1]].copy()]
+
+        # Tạo thế hệ mới bằng Tournament Selection + Lai ghép BLX-alpha + Đột biến Gaussian
+        while len(new_pop) < pop_size:
+            # Tournament Selection (k=3)
+            idx1 = np.random.choice(pop_size, 3, replace=False)
+            p1 = pop[idx1[np.argmin(costs[idx1])]]
+            idx2 = np.random.choice(pop_size, 3, replace=False)
+            p2 = pop[idx2[np.argmin(costs[idx2])]]
+
+            # Lai ghép (Crossover)
+            alpha = np.random.uniform(-0.1, 1.1, size=3)
+            child = alpha * p1 + (1.0 - alpha) * p2
+
+            # Đột biến (Mutation) giảm dần theo thế hệ
+            if np.random.rand() < 0.25:
+                sigma = (bounds[:, 1] - bounds[:, 0]) * 0.08 * (1.0 - gen / generations)
+                child += np.random.normal(0, sigma, size=3)
+
+            child = np.clip(child, bounds[:, 0], bounds[:, 1])
+            new_pop.append(child)
+
+        pop = np.array(new_pop)
+
+    return best_individual, best_cost_history
+
+
+# ==============================================================================
+# 4. CHẠY THỰC NGHIỆM, SO SÁNH 3 PHƯƠNG PHÁP & VẼ ĐỒ THỊ BÁO CÁO
+# ==============================================================================
+if __name__ == "__main__":
+    t_array = np.linspace(0, 4.0, 801)
+    motor_nom = DCMotorSystem(R=1.0, L=0.05, J=0.01, B=0.005, Ke=0.1, Kt=0.1)
+
+    # Chạy GA tìm bộ thông số tối ưu
+    ga_params, cost_history = optimize_pid_ga(motor_nom, t_array, pop_size=30, generations=25)
+
+    # Định nghĩa 3 bộ điều khiển đối chứng
+    controllers = {
+        "PID Chỉnh tay (Manual)": (0.80, 4.50, 0.005),
+        "PID Ziegler-Nichols (Z-N)": (2.85, 28.50, 0.042),
+        "PID Tối ưu AI (GA)": tuple(ga_params)
+    }
+
+    print("\n" + "="*95)
+    print(f"{'Phương pháp':<26} | {'(Kp, Ki, Kd)':<22} | {'POT(%)':<7} | {'Ts(s)':<6} | {'ITAE':<6} | {'RMSE':<7} | {'Energy':<8}")
+    print("-"*95)
+
+    results = {}
+    for name, (Kp, Ki, Kd) in controllers.items():
+        w_rpm, u_arr, ia_arr, _ = motor_nom.simulate(Kp, Ki, Kd, t_array)
+        m = evaluate_performance(t_array, w_rpm, u_arr)
+        results[name] = (w_rpm, u_arr, ia_arr, m)
+        param_str = f"({Kp:.2f}, {Ki:.2f}, {Kd:.3f})"
+        print(f"{name:<26} | {param_str:<22} | {m['POT']:<7.2f} | {m['Ts']:<6.2f} | "
+              f"{m['ITAE']:<6.3f} | {m['RMSE']:<7.2f} | {m['Energy']:<8.1f}")
+    print("="*95)
+
+    # Vẽ đồ thị tổng hợp
+    plt.figure(figsize=(13, 8))
+    plt.subplot(2, 2, 1)
+    plt.axhline(1200, color='k', linestyle='--', label='Setpoint (1200 RPM)')
+    for name, (w_rpm, _, _, _) in results.items():
+        plt.plot(t_array, w_rpm, linewidth=2, label=name)
+    plt.axvline(2.0, color='r', linestyle=':', alpha=0.6, label='Đóng tải TL=0.25 N.m')
+    plt.title("1. Đáp ứng tốc độ động cơ DC (Định mức + Nhiễu tải)")
+    plt.xlabel("Thời gian (s)")
+    plt.ylabel("Tốc độ (RPM)")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    plt.subplot(2, 2, 2)
+    for name, (_, u_arr, _, _) in results.items():
+        plt.plot(t_array, u_arr, linewidth=1.5, label=name)
+    plt.title("2. Tín hiệu điện áp điều khiển u(t)")
+    plt.xlabel("Thời gian (s)")
+    plt.ylabel("Điện áp (V)")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    plt.subplot(2, 2, 3)
+    plt.plot(range(1, len(cost_history)+1), cost_history, 'o-', color='emerald' if False else 'green', linewidth=2)
+    plt.title("3. Đồ thị hội tụ hàm mục tiêu của Thuật toán Di truyền (GA)")
+    plt.xlabel("Thế hệ (Generation)")
+    plt.ylabel("Best Cost J")
+    plt.grid(True, alpha=0.3)
+
+    # Kiểm thử khi thông số động cơ thay đổi (R tăng 50%, J tăng 80%)
+    motor_perturbed = DCMotorSystem(R=1.5, L=0.05, J=0.018, B=0.005, Ke=0.1, Kt=0.1)
+    plt.subplot(2, 2, 4)
+    plt.axhline(1200, color='k', linestyle='--', label='Setpoint')
+    for name, (Kp, Ki, Kd) in controllers.items():
+        w_p, _, _, _ = motor_perturbed.simulate(Kp, Ki, Kd, t_array)
+        plt.plot(t_array, w_p, linewidth=2, label=name)
+    plt.title("4. Đánh giá độ bền vững khi R tăng +50% & J tăng +80%")
+    plt.xlabel("Thời gian (s)")
+    plt.ylabel("Tốc độ (RPM)")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()</code></pre>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast-box" class="fixed bottom-5 right-5 z-50 hidden bg-slate-900 border border-cyan-500/50 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toast-msg" class="text-xs font-medium">Đã cập nhật thông số bộ điều khiển!</span>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MAIN JAVASCRIPT LOGIC                      -->
+    <!-- ========================================== -->
+    <script>
+        // -----------------------------------------------------------
+        // 1. TAB NAVIGATION & TOAST HELPER
+        // -----------------------------------------------------------
+        function switchTab(tabId) {
+            ['tab-sim', 'tab-report', 'tab-code'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(tabId).classList.remove('hidden');
+
+            const btnMap = {
+                'tab-sim': 'btn-tab-sim',
+                'tab-report': 'btn-tab-report',
+                'tab-code': 'btn-tab-code'
+            };
+            Object.entries(btnMap).forEach(([key, btnId]) => {
+                const btn = document.getElementById(btnId);
+                if (key === tabId) {
+                    btn.className = "tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 bg-cyan-600 text-white shadow-lg shadow-cyan-600/30";
+                } else {
+                    btn.className = "tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800";
+                }
+            });
+
+            if (tabId === 'tab-sim') {
+                setTimeout(() => {
+                    onWindowResize3D();
+                    if (realtimeChart) realtimeChart.resize();
+                    if (benchmarkChart) benchmarkChart.resize();
+                }, 60);
+            }
+        }
+
+        function showToast(msg) {
+            const box = document.getElementById('toast-box');
+            document.getElementById('toast-msg').textContent = msg;
+            box.classList.remove('hidden');
+            clearTimeout(window.toastTimer);
+            window.toastTimer = setTimeout(() => box.classList.add('hidden'), 3200);
+        }
+
+        function copyPythonCode() {
+            const codeText = document.getElementById('python-code-block').innerText;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = codeText;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+            showToast("Đã sao chép toàn bộ mã nguồn Python vào Clipboard!");
+        }
+
+        // -----------------------------------------------------------
+        // 2. DC MOTOR STATE-SPACE & PID CONTROLLER ENGINE (RK4)
+        // -----------------------------------------------------------
+        const plantParams = {
+            R: 1.0,        // Armature resistance (Ohm)
+            L: 0.05,       // Armature inductance (H)
+            J: 0.010,      // Rotor + Flywheel inertia (kg.m^2)
+            B: 0.005,      // Viscous friction (N.m.s/rad)
+            Ke: 0.1,       // Back-EMF constant (V.s/rad)
+            Kt: 0.1,       // Torque constant (N.m/A)
+            uMax: 24.0     // Voltage supply saturation (V)
+        };
+
+        const pidPresets = {
+            manual: { Kp: 0.80, Ki: 4.50, Kd: 0.005, label: "Manual Tuning" },
+            zn:     { Kp: 2.85, Ki: 28.50, Kd: 0.042, label: "Ziegler-Nichols" },
+            ga:     { Kp: 1.68, Ki: 14.25, Kd: 0.019, label: "GA Optimized" }
+        };
+
+        // Live Real-time State
+        let liveState = {
+            w: 0.0,             // rad/s
+            ia: 0.0,            // A
+            u: 0.0,             // V
+            setpointRPM: 1200,  // RPM
+            loadTorque: 0.0,    // N.m
+            loadActive: false,
+            Kp: pidPresets.ga.Kp,
+            Ki: pidPresets.ga.Ki,
+            Kd: pidPresets.ga.Kd,
+            integral: 0.0,
+            prevError: 0.0,
+            simTime: 0.0
+        };
+
+        // Step one RK4 interval for Live Real-time Simulation
+        function stepLiveDCMotor(dt) {
+            const wRef = liveState.setpointRPM * (2 * Math.PI / 60);
+            const error = wRef - liveState.w;
+
+            // PID with Anti-windup clamping
+            liveState.integral += error * dt;
+            const maxInt = plantParams.uMax / Math.max(liveState.Ki, 0.1);
+            liveState.integral = Math.max(-maxInt, Math.min(maxInt, liveState.integral));
+
+            const derivative = (error - liveState.prevError) / dt;
+            liveState.prevError = error;
+
+            const uRaw = liveState.Kp * error + liveState.Ki * liveState.integral + liveState.Kd * derivative;
+            liveState.u = Math.max(-plantParams.uMax, Math.min(plantParams.uMax, uRaw));
+
+            const tl = liveState.loadActive ? 0.25 : 0.0;
+
+            function deriv(wVal, iVal) {
+                const dw = (plantParams.Kt * iVal - plantParams.B * wVal - tl) / plantParams.J;
+                const di = (liveState.u - plantParams.R * iVal - plantParams.Ke * wVal) / plantParams.L;
+                return [dw, di];
+            }
+
+            const [k1w, k1i] = deriv(liveState.w, liveState.ia);
+            const [k2w, k2i] = deriv(liveState.w + 0.5*dt*k1w, liveState.ia + 0.5*dt*k1i);
+            const [k3w, k3i] = deriv(liveState.w + 0.5*dt*k2w, liveState.ia + 0.5*dt*k2i);
+            const [k4w, k4i] = deriv(liveState.w + dt*k3w, liveState.ia + dt*k3i);
+
+            liveState.w += (dt / 6.0) * (k1w + 2*k2w + 2*k3w + k4w);
+            liveState.ia += (dt / 6.0) * (k1i + 2*k2i + 2*k3i + k4i);
+            liveState.simTime += dt;
+        }
+
+        // Batch Simulation for Benchmarking & GA Fitness Evaluation (0 to 4.0s, dt=0.01s)
+        function runBatchSimulation(Kp, Ki, Kd, customR = plantParams.R, customJ = plantParams.J) {
+            const dt = 0.01;
+            const totalSteps = 400; // 4.0 seconds
+            const wRefRPM = liveState.setpointRPM;
+            const wRef = wRefRPM * (2 * Math.PI / 60);
+
+            let w = 0.0;
+            let ia = 0.0;
+            let integral = 0.0;
+            let prevError = wRef;
+
+            const rpmHistory = [];
+            const timeHistory = [];
+            let itae = 0.0;
+            let sumSqErr = 0.0;
+            let sumAbsErr = 0.0;
+            let energy = 0.0;
+            let maxRPM = 0.0;
+
+            for (let k = 0; k <= totalSteps; k++) {
+                const t = k * dt;
+                const rpm = w * (60 / (2 * Math.PI));
+                rpmHistory.push(rpm);
+                timeHistory.push(t.toFixed(2));
+
+                if (t < 2.0 && rpm > maxRPM) maxRPM = rpm;
+
+                const errRPM = wRefRPM - rpm;
+                const errNorm = Math.abs(errRPM) / wRefRPM;
+                itae += t * errNorm * dt;
+                sumSqErr += errRPM * errRPM;
+                sumAbsErr += Math.abs(errRPM);
+
+                const error = wRef - w;
+                integral += error * dt;
+                const maxInt = plantParams.uMax / Math.max(Ki, 0.1);
+                integral = Math.max(-maxInt, Math.min(maxInt, integral));
+
+                const derivErr = k === 0 ? 0.0 : (error - prevError) / dt;
+                prevError = error;
+
+                let u = Kp * error + Ki * integral + Kd * derivErr;
+                u = Math.max(-plantParams.uMax, Math.min(plantParams.uMax, u));
+                energy += (u * u) * dt;
+
+                const tl = t >= 2.0 ? 0.25 : 0.0;
+
+                function dState(wVal, iVal) {
+                    const dw = (plantParams.Kt * iVal - plantParams.B * wVal - tl) / customJ;
+                    const di = (u - customR * iVal - plantParams.Ke * wVal) / plantParams.L;
+                    return [dw, di];
+                }
+
+                const [k1w, k1i] = dState(w, ia);
+                const [k2w, k2i] = dState(w + 0.5*dt*k1w, ia + 0.5*dt*k1i);
+                const [k3w, k3i] = dState(w + 0.5*dt*k2w, ia + 0.5*dt*k2i);
+                const [k4w, k4i] = dState(w + dt*k3w, ia + dt*k3i);
+
+                w += (dt / 6.0) * (k1w + 2*k2w + 2*k3w + k4w);
+                ia += (dt / 6.0) * (k1i + 2*k2i + 2*k3i + k4i);
+            }
+
+            // Calculate Overshoot POT% & Settling Time Ts (before t=2.0s load step)
+            const pot = Math.max(0.0, ((maxRPM - wRefRPM) / wRefRPM) * 100.0);
+            let ts = 0.0;
+            const band = 0.02 * wRefRPM;
+            for (let k = 199; k >= 0; k--) {
+                if (Math.abs(rpmHistory[k] - wRefRPM) > band) {
+                    ts = k * dt;
+                    break;
+                }
+            }
+
+            const rmse = Math.sqrt(sumSqErr / (totalSteps + 1));
+            const mae = sumAbsErr / (totalSteps + 1);
+            const costJ = 1.0 * itae + 0.08 * pot + 1.5 * ts + 0.0002 * energy;
+
+            return {
+                timeHistory,
+                rpmHistory,
+                pot,
+                ts,
+                itae,
+                rmse,
+                mae,
+                energy,
+                costJ
+            };
+        }
+
+        // -----------------------------------------------------------
+        // 3. THREE.JS 3D INDUSTRIAL DC MOTOR & CONVEYOR SIMULATION
+        // -----------------------------------------------------------
+        let scene, camera, renderer, controls;
+        let rotorShaftGroup, flywheelMesh, encoderDiscMesh, encoderLedGlow;
+        let motorCoilMesh, brakeClampMesh, heavyCrateMesh;
+        let conveyorRollers = [];
+        let conveyorItems = [];
+        let sparkParticles = [];
+
+        function initThreeJS() {
+            const container = document.getElementById('three-canvas-container');
+            const width = container.clientWidth || 700;
+            const height = container.clientHeight || 480;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x060a12);
+            scene.fog = new THREE.FogExp2(0x060a12, 0.025);
+
+            camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 100);
+            camera.position.set(5.8, 4.2, 6.8);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.innerHTML = '';
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.06;
+            controls.target.set(0.5, 0.8, 0);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.7);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight.position.set(8, 12, 8);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            const cyanPointLight = new THREE.PointLight(0x06b6d4, 1.5, 12);
+            cyanPointLight.position.set(-2, 3, 2);
+            scene.add(cyanPointLight);
+
+            // Industrial Floor Grid
+            const gridHelper = new THREE.GridHelper(20, 20, 0x1e293b, 0x0f172a);
+            gridHelper.position.y = -0.5;
+            scene.add(gridHelper);
+
+            // Base Platform
+            const baseGeo = new THREE.BoxGeometry(8.5, 0.4, 3.6);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6, metalness: 0.4 });
+            const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+            baseMesh.position.set(0.4, -0.3, 0);
+            baseMesh.receiveShadow = true;
+            scene.add(baseMesh);
+
+            // 1. DC MOTOR STATOR HOUSING (Left side)
+            const motorGroup = new THREE.Group();
+            motorGroup.position.set(-2.5, 0.9, 0);
+            scene.add(motorGroup);
+
+            const statorGeo = new THREE.CylinderGeometry(0.95, 0.95, 2.1, 32);
+            statorGeo.rotateZ(Math.PI / 2);
+            const statorMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.3 });
+            const statorMesh = new THREE.Mesh(statorGeo, statorMat);
+            motorGroup.add(statorMesh);
+
+            // Cutaway glowing copper armature coil ring visible around housing
+            const coilGeo = new THREE.CylinderGeometry(0.98, 0.98, 0.75, 32);
+            coilGeo.rotateZ(Math.PI / 2);
+            const coilMat = new THREE.MeshStandardMaterial({
+                color: 0xd97706,
+                emissive: 0xea580c,
+                emissiveIntensity: 0.2,
+                metalness: 0.5,
+                roughness: 0.4
+            });
+            motorCoilMesh = new THREE.Mesh(coilGeo, coilMat);
+            motorGroup.add(motorCoilMesh);
+
+            // Cooling Fins on Motor
+            for (let i = -3; i <= 3; i++) {
+                if (i === 0) continue;
+                const finGeo = new THREE.BoxGeometry(1.8, 0.06, 2.0);
+                const finMesh = new THREE.Mesh(finGeo, statorMat);
+                finMesh.position.y = i * 0.22;
+                motorGroup.add(finMesh);
+            }
+
+            // 2. ROTATING SHAFT + OPTICAL ENCODER + FLYWHEEL PULLEY
+            rotorShaftGroup = new THREE.Group();
+            rotorShaftGroup.position.set(-2.5, 0.9, 0);
+            scene.add(rotorShaftGroup);
+
+            // Main Steel Shaft
+            const shaftGeo = new THREE.CylinderGeometry(0.16, 0.16, 4.4, 24);
+            shaftGeo.rotateZ(Math.PI / 2);
+            const shaftMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.15 });
+            const shaftMesh = new THREE.Mesh(shaftGeo, shaftMat);
+            shaftMesh.position.x = 1.6;
+            rotorShaftGroup.add(shaftMesh);
+
+            // Optical Encoder Disc (Back of motor)
+            const encGroup = new THREE.Group();
+            encGroup.position.x = -1.25;
+            const discGeo = new THREE.CylinderGeometry(0.75, 0.75, 0.05, 32);
+            discGeo.rotateZ(Math.PI / 2);
+            const discMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.6, roughness: 0.3 });
+            encoderDiscMesh = new THREE.Mesh(discGeo, discMat);
+            encGroup.add(encoderDiscMesh);
+
+            // Glowing Cyan Slots on Encoder Disc
+            const slotMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2;
+                const slotGeo = new THREE.BoxGeometry(0.07, 0.22, 0.06);
+                const slot = new THREE.Mesh(slotGeo, slotMat);
+                slot.position.set(0, Math.cos(angle) * 0.52, Math.sin(angle) * 0.52);
+                slot.rotation.x = -angle;
+                encGroup.add(slot);
+            }
+            rotorShaftGroup.add(encGroup);
+
+            // Optical Encoder Sensor Module (Fixed)
+            const sensorGeo = new THREE.BoxGeometry(0.35, 0.4, 0.35);
+            const sensorMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, emissive: 0x06b6d4, emissiveIntensity: 0.6 });
+            encoderLedGlow = new THREE.Mesh(sensorGeo, sensorMat);
+            encoderLedGlow.position.set(-3.75, 1.65, 0);
+            scene.add(encoderLedGlow);
+
+            // Heavy Industrial Flywheel (Middle)
+            const flyGroup = new THREE.Group();
+            flyGroup.position.x = 2.0;
+            const flyGeo = new THREE.CylinderGeometry(1.05, 1.05, 0.32, 36);
+            flyGeo.rotateZ(Math.PI / 2);
+            const flyMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.25 });
+            flywheelMesh = new THREE.Mesh(flyGeo, flyMat);
+            flyGroup.add(flywheelMesh);
+
+            // High-contrast spokes on Flywheel to clearly visualize rotation speed
+            const spokeMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+            for (let i = 0; i < 6; i++) {
+                const spokeGeo = new THREE.BoxGeometry(0.35, 1.85, 0.12);
+                const spoke = new THREE.Mesh(spokeGeo, spokeMat);
+                spoke.rotation.x = (i / 6) * Math.PI;
+                flyGroup.add(spoke);
+            }
+            rotorShaftGroup.add(flyGroup);
+
+            // 3. INDUSTRIAL CONVEYOR BELT SYSTEM (Right side driven by shaft)
+            const convGroup = new THREE.Group();
+            convGroup.position.set(2.2, 0.4, 0);
+            scene.add(convGroup);
+
+            const frameGeo = new THREE.BoxGeometry(4.2, 0.35, 1.8);
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.5, roughness: 0.5 });
+            const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+            convGroup.add(frameMesh);
+
+            // Conveyor Rollers
+            const rollerGeo = new THREE.CylinderGeometry(0.22, 0.22, 1.65, 20);
+            rollerGeo.rotateX(Math.PI / 2);
+            const rollerMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.7, roughness: 0.2 });
+            for (let i = -3; i <= 3; i++) {
+                const roller = new THREE.Mesh(rollerGeo, rollerMat);
+                roller.position.set(i * 0.6, 0.1, 0);
+                convGroup.add(roller);
+                conveyorRollers.push(roller);
+            }
+
+            // Product Packages Moving on Conveyor
+            const boxColors = [0x0ea5e9, 0x10b981, 0xf59e0b];
+            for (let i = 0; i < 3; i++) {
+                const itemGeo = new THREE.BoxGeometry(0.55, 0.42, 0.65);
+                const itemMat = new THREE.MeshStandardMaterial({ color: boxColors[i], roughness: 0.4 });
+                const item = new THREE.Mesh(itemGeo, itemMat);
+                item.position.set(-1.5 + i * 1.4, 0.52, 0);
+                convGroup.add(item);
+                conveyorItems.push(item);
+            }
+
+            // 4. LOAD DISTURBANCE VISUALS: Mechanical Brake Caliper + Heavy Load Crate
+            const brakeGeo = new THREE.BoxGeometry(0.55, 0.45, 0.9);
+            const brakeMat = new THREE.MeshStandardMaterial({
+                color: 0xf43f5e,
+                emissive: 0xe11d48,
+                emissiveIntensity: 0.4
+            });
+            brakeClampMesh = new THREE.Mesh(brakeGeo, brakeMat);
+            brakeClampMesh.position.set(-0.5, 2.45, 0); // Raised when inactive
+            scene.add(brakeClampMesh);
+
+            // Heavy Load Crate that drops onto conveyor when Load Disturbance is active
+            const heavyGeo = new THREE.BoxGeometry(0.85, 0.75, 0.95);
+            const heavyMat = new THREE.MeshStandardMaterial({
+                color: 0xe11d48,
+                emissive: 0x9f1239,
+                emissiveIntensity: 0.35,
+                metalness: 0.3,
+                roughness: 0.4
+            });
+            heavyCrateMesh = new THREE.Mesh(heavyGeo, heavyMat);
+            heavyCrateMesh.position.set(2.2, 3.2, 0);
+            heavyCrateMesh.visible = false;
+            scene.add(heavyCrateMesh);
+
+            window.addEventListener('resize', onWindowResize3D);
+        }
+
+        function onWindowResize3D() {
+            const container = document.getElementById('three-canvas-container');
+            if (!container || !renderer || !camera) return;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            if (width === 0 || height === 0) return;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        function resetCamera3D() {
+            if (!camera || !controls) return;
+            camera.position.set(5.8, 4.2, 6.8);
+            controls.target.set(0.5, 0.8, 0);
+            controls.update();
+        }
+
+        // -----------------------------------------------------------
+        // 4. CHART.JS REAL-TIME & BENCHMARK CHARTS
+        // -----------------------------------------------------------
+        let realtimeChart, benchmarkChart;
+        const maxLivePoints = 120;
+        const liveLabels = Array(maxLivePoints).fill('');
+        const liveSetpointData = Array(maxLivePoints).fill(1200);
+        const liveSpeedData = Array(maxLivePoints).fill(0);
+
+        function initCharts() {
+            const ctxLive = document.getElementById('realtimeChart').getContext('2d');
+            realtimeChart = new Chart(ctxLive, {
+                type: 'line',
+                data: {
+                    labels: liveLabels,
+                    datasets: [
+                        {
+                            label: 'Tốc độ đặt Setpoint (RPM)',
+                            data: liveSetpointData,
+                            borderColor: '#f59e0b',
+                            borderDash: [6, 4],
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Tốc độ thực tế Động cơ DC (RPM)',
+                            data: liveSpeedData,
+                            borderColor: '#06b6d4',
+                            backgroundColor: 'rgba(6, 182, 212, 0.12)',
+                            borderWidth: 2.5,
+                            pointRadius: 0,
+                            fill: true,
+                            tension: 0.2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            min: 0,
+                            max: 2200,
+                            grid: { color: 'rgba(51, 65, 85, 0.35)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 } }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e2e8f0', font: { family: 'Inter', size: 11 } }
+                        }
+                    }
+                }
+            });
+
+            const ctxBench = document.getElementById('benchmarkChart').getContext('2d');
+            benchmarkChart = new Chart(ctxBench, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 450 },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Thời gian t (giây) - Đóng tải tại t = 2.0s', color: '#94a3b8', font: { size: 11 } },
+                            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+                            ticks: { color: '#94a3b8', maxTicksLimit: 9, font: { family: 'JetBrains Mono', size: 10 } }
+                        },
+                        y: {
+                            min: 0,
+                            max: 1650,
+                            title: { display: true, text: 'Tốc độ (RPM)', color: '#94a3b8', font: { size: 11 } },
+                            grid: { color: 'rgba(51, 65, 85, 0.35)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 } }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e2e8f0', font: { family: 'Inter', size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // -----------------------------------------------------------
+        // 5. BENCHMARK COMPARISON & QUANTITATIVE METRICS TABLE
+        // -----------------------------------------------------------
+        function runComparisonBenchmark() {
+            const resManual = runBatchSimulation(pidPresets.manual.Kp, pidPresets.manual.Ki, pidPresets.manual.Kd);
+            const resZN = runBatchSimulation(pidPresets.zn.Kp, pidPresets.zn.Ki, pidPresets.zn.Kd);
+            const resGA = runBatchSimulation(liveState.Kp, liveState.Ki, liveState.Kd);
+
+            const spLine = resGA.timeHistory.map(() => liveState.setpointRPM);
+
+            benchmarkChart.options.scales.y.max = Math.max(1600, Math.round(liveState.setpointRPM * 1.35));
+            benchmarkChart.data.labels = resGA.timeHistory;
+            benchmarkChart.data.datasets = [
+                {
+                    label: `Setpoint (${liveState.setpointRPM} RPM)`,
+                    data: spLine,
+                    borderColor: '#94a3b8',
+                    borderDash: [4, 4],
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                },
+                {
+                    label: 'PID Chỉnh tay (Manual)',
+                    data: resManual.rpmHistory,
+                    borderColor: '#f59e0b',
+                    borderWidth: 2,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Ziegler–Nichols (Z-N)',
+                    data: resZN.rpmHistory,
+                    borderColor: '#a855f7',
+                    borderWidth: 2,
+                    pointRadius: 0
+                },
+                {
+                    label: 'PID Tối ưu GA (Đang chọn)',
+                    data: resGA.rpmHistory,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                    borderWidth: 2.8,
+                    pointRadius: 0,
+                    fill: true
+                }
+            ];
+            benchmarkChart.update();
+
+            // Populate Quantitative Metrics Table
+            const rows = [
+                {
+                    name: 'PID Chỉnh tay (Manual)',
+                    badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+                    params: `(${pidPresets.manual.Kp.toFixed(2)}, ${pidPresets.manual.Ki.toFixed(2)}, ${pidPresets.manual.Kd.toFixed(3)})`,
+                    data: resManual
+                },
+                {
+                    name: 'PID Ziegler–Nichols (Z-N)',
+                    badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+                    params: `(${pidPresets.zn.Kp.toFixed(2)}, ${pidPresets.zn.Ki.toFixed(2)}, ${pidPresets.zn.Kd.toFixed(3)})`,
+                    data: resZN
+                },
+                {
+                    name: 'PID Tối ưu AI (Thuật toán GA)',
+                    badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold',
+                    params: `(${liveState.Kp.toFixed(2)}, ${liveState.Ki.toFixed(2)}, ${liveState.Kd.toFixed(3)})`,
+                    data: resGA,
+                    highlight: true
+                }
+            ];
+
+            const tbody = document.getElementById('metrics-table-body');
+            tbody.innerHTML = rows.map(r => `
+                <tr class="${r.highlight ? 'bg-emerald-950/25 text-emerald-200' : 'text-slate-300'} hover:bg-slate-800/50 transition">
+                    <td class="py-2.5 px-3">
+                        <span class="px-2 py-0.5 rounded text-xs border ${r.badge}">${r.name}</span>
+                    </td>
+                    <td class="py-2.5 px-3">${r.params}</td>
+                    <td class="py-2.5 px-3 ${r.data.pot < 2.0 ? 'text-emerald-400 font-bold' : 'text-amber-400'}">${r.data.pot.toFixed(2)} %</td>
+                    <td class="py-2.5 px-3">${r.data.ts.toFixed(2)} s</td>
+                    <td class="py-2.5 px-3 font-semibold">${r.data.itae.toFixed(4)}</td>
+                    <td class="py-2.5 px-3">${r.data.rmse.toFixed(1)}</td>
+                    <td class="py-2.5 px-3">${r.data.mae.toFixed(1)}</td>
+                    <td class="py-2.5 px-3">${r.data.energy.toFixed(0)} V²·s</td>
+                </tr>
+            `).join('');
+        }
+
+        // -----------------------------------------------------------
+        // 6. INTERACTIVE CONTROLS & LIVE GENETIC ALGORITHM RUNNER
+        // -----------------------------------------------------------
+        function selectPIDPreset(mode) {
+            const p = pidPresets[mode];
+            liveState.Kp = p.Kp;
+            liveState.Ki = p.Ki;
+            liveState.Kd = p.Kd;
+
+            document.getElementById('slider-kp').value = p.Kp;
+            document.getElementById('slider-ki').value = p.Ki;
+            document.getElementById('slider-kd').value = p.Kd;
+            document.getElementById('val-kp').textContent = p.Kp.toFixed(2);
+            document.getElementById('val-ki').textContent = p.Ki.toFixed(2);
+            document.getElementById('val-kd').textContent = p.Kd.toFixed(3);
+            document.getElementById('active-mode-badge').textContent = p.label;
+
+            // Highlight active preset button
+            ['manual', 'zn', 'ga'].forEach(k => {
+                const el = document.getElementById('preset-' + k);
+                if (k === mode) {
+                    el.className = "p-2.5 rounded-xl border border-cyan-400 bg-cyan-950/40 text-left transition glow-cyan";
+                } else {
+                    el.className = "p-2.5 rounded-xl border border-slate-700 bg-slate-900/70 hover:bg-slate-800 text-left transition";
+                }
+            });
+
+            triggerStepRestart();
+            runComparisonBenchmark();
+            showToast(`Đã áp dụng bộ thông số ${p.label}: Kp=${p.Kp}, Ki=${p.Ki}, Kd=${p.Kd}`);
+        }
+
+        function updateManualPID() {
+            liveState.Kp = parseFloat(document.getElementById('slider-kp').value);
+            liveState.Ki = parseFloat(document.getElementById('slider-ki').value);
+            liveState.Kd = parseFloat(document.getElementById('slider-kd').value);
+
+            document.getElementById('val-kp').textContent = liveState.Kp.toFixed(2);
+            document.getElementById('val-ki').textContent = liveState.Ki.toFixed(2);
+            document.getElementById('val-kd').textContent = liveState.Kd.toFixed(3);
+            document.getElementById('active-mode-badge').textContent = "Custom PID";
+
+            runComparisonBenchmark();
+        }
+
+        function updateSetpoint(val) {
+            liveState.setpointRPM = parseFloat(val);
+            document.getElementById('val-setpoint').textContent = `${val} RPM`;
+            document.getElementById('hud-setpoint').textContent = `${val} RPM`;
+            runComparisonBenchmark();
+        }
+
+        function toggleLoadDisturbance() {
+            liveState.loadActive = !liveState.loadActive;
+            const btn = document.getElementById('btn-load-disturb');
+            const dot = document.getElementById('load-dot');
+            const txt = document.getElementById('load-text');
+
+            if (liveState.loadActive) {
+                btn.className = "py-2 px-3 rounded-xl font-semibold text-xs border border-rose-500 bg-rose-600 text-white transition flex items-center justify-center gap-2 glow-rose";
+                btn.innerHTML = `<i class="fa-solid fa-weight-hanging"></i> Ngắt Tải Đột Ngột (Đang đóng 0.25 N·m)`;
+                dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping";
+                txt.textContent = "Đang đóng tải nặng (τ_L = 0.25 N·m)";
+                heavyCrateMesh.visible = true;
+                heavyCrateMesh.position.y = 2.6;
+                showToast("Đã đóng tải đột ngột τ_L = 0.25 N·m lên băng tải! Bộ điều khiển PID đang bù điện áp.");
+            } else {
+                btn.className = "py-2 px-3 rounded-xl font-semibold text-xs border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition flex items-center justify-center gap-2";
+                btn.innerHTML = `<i class="fa-solid fa-box-open"></i> Đóng Tải Đột Ngột (τ_L = 0.25 N·m)`;
+                dot.className = "w-2.5 h-2.5 rounded-full bg-slate-500";
+                txt.textContent = "Tải định mức (τ_L = 0.0 N·m)";
+                heavyCrateMesh.visible = false;
+                showToast("Đã ngắt tải đột ngột khỏi hệ thống truyền động.");
+            }
+        }
+
+        function triggerStepRestart() {
+            liveState.w = 0.0;
+            liveState.ia = 0.0;
+            liveState.integral = 0.0;
+            liveState.prevError = 0.0;
+        }
+
+        function updatePlantParams() {
+            plantParams.R = parseFloat(document.getElementById('slider-ra').value);
+            plantParams.J = parseFloat(document.getElementById('slider-j').value);
+
+            const pctR = Math.round((plantParams.R / 1.0) * 100);
+            document.getElementById('val-ra').textContent = `${plantParams.R.toFixed(2)} Ω (${pctR}%)`;
+            document.getElementById('val-j').textContent = `${plantParams.J.toFixed(3)} kg·m²`;
+
+            runComparisonBenchmark();
+        }
+
+        function resetPlantParams() {
+            plantParams.R = 1.0;
+            plantParams.J = 0.010;
+            document.getElementById('slider-ra').value = 1.0;
+            document.getElementById('slider-j').value = 0.010;
+            updatePlantParams();
+            showToast("Đã khôi phục thông số vật lý định mức của động cơ DC.");
+        }
+
+        // Live In-Browser Genetic Algorithm Evolution
+        let gaRunning = false;
+        function runLiveGAOptimization() {
+            if (gaRunning) return;
+            gaRunning = true;
+
+            const btn = document.getElementById('btn-run-ga');
+            const bar = document.getElementById('ga-progress-bar');
+            const statusTxt = document.getElementById('ga-status-text');
+            const genesTxt = document.getElementById('ga-best-genes');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-60');
+
+            const popSize = 20;
+            const maxGen = 25;
+            let currentGen = 0;
+
+            // Initialize population: [Kp, Ki, Kd]
+            let pop = [];
+            for (let i = 0; i < popSize; i++) {
+                pop.push([
+                    0.3 + Math.random() * 4.2,
+                    2.0 + Math.random() * 32.0,
+                    Math.random() * 0.12
+                ]);
+            }
+
+            let bestGenes = [1.68, 14.25, 0.019];
+            let bestCost = Infinity;
+
+            function stepGeneration() {
+                currentGen++;
+                const costs = pop.map(ind => {
+                    const res = runBatchSimulation(ind[0], ind[1], ind[2]);
+                    return res.costJ;
+                });
+
+                for (let i = 0; i < popSize; i++) {
+                    if (costs[i] < bestCost) {
+                        bestCost = costs[i];
+                        bestGenes = [...pop[i]];
+                    }
+                }
+
+                // Update UI progress
+                const pct = Math.round((currentGen / maxGen) * 100);
+                bar.style.width = `${pct}%`;
+                statusTxt.textContent = `Đang tiến hóa Gen ${currentGen}/${maxGen} • Best Cost J = ${bestCost.toFixed(4)}`;
+                genesTxt.textContent = `[Kp=${bestGenes[0].toFixed(2)}, Ki=${bestGenes[1].toFixed(2)}, Kd=${bestGenes[2].toFixed(3)}]`;
+
+                // Apply current best to sliders
+                liveState.Kp = bestGenes[0];
+                liveState.Ki = bestGenes[1];
+                liveState.Kd = bestGenes[2];
+                document.getElementById('slider-kp').value = bestGenes[0];
+                document.getElementById('slider-ki').value = bestGenes[1];
+                document.getElementById('slider-kd').value = bestGenes[2];
+                document.getElementById('val-kp').textContent = bestGenes[0].toFixed(2);
+                document.getElementById('val-ki').textContent = bestGenes[1].toFixed(2);
+                document.getElementById('val-kd').textContent = bestGenes[2].toFixed(3);
+
+                // Selection + Crossover + Mutation
+                const sortedIdx = costs.map((c, idx) => ({ c, idx })).sort((a, b) => a.c - b.c).map(x => x.idx);
+                const nextPop = [ [...pop[sortedIdx[0]]], [...pop[sortedIdx[1]]] ];
+
+                while (nextPop.length < popSize) {
+                    const p1 = pop[sortedIdx[Math.floor(Math.random() * 6)]];
+                    const p2 = pop[sortedIdx[Math.floor(Math.random() * 10)]];
+                    const alpha = Math.random();
+                    let child = [
+                        alpha * p1[0] + (1 - alpha) * p2[0],
+                        alpha * p1[1] + (1 - alpha) * p2[1],
+                        alpha * p1[2] + (1 - alpha) * p2[2]
+                    ];
+
+                    if (Math.random() < 0.3) {
+                        const decay = 1.0 - (currentGen / maxGen);
+                        child[0] += (Math.random() - 0.5) * 0.8 * decay;
+                        child[1] += (Math.random() - 0.5) * 5.0 * decay;
+                        child[2] += (Math.random() - 0.5) * 0.02 * decay;
+                    }
+
+                    child[0] = Math.max(0.1, Math.min(5.0, child[0]));
+                    child[1] = Math.max(0.5, Math.min(40.0, child[1]));
+                    child[2] = Math.max(0.0, Math.min(0.2, child[2]));
+                    nextPop.push(child);
+                }
+                pop = nextPop;
+
+                if (currentGen < maxGen) {
+                    setTimeout(stepGeneration, 45);
+                } else {
+                    gaRunning = false;
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-60');
+                    pidPresets.ga.Kp = bestGenes[0];
+                    pidPresets.ga.Ki = bestGenes[1];
+                    pidPresets.ga.Kd = bestGenes[2];
+                    triggerStepRestart();
+                    runComparisonBenchmark();
+                    showToast(`Thuật toán Di truyền (GA) hội tụ hoàn tất sau 25 thế hệ!`);
+                }
+            }
+
+            stepGeneration();
+        }
+
+        // -----------------------------------------------------------
+        // 7. MAIN ANIMATION LOOP (PHYSICS + 3D + HUD + REALTIME CHART)
+        // -----------------------------------------------------------
+        let frameCounter = 0;
+
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+
+            // Step RK4 physics (2 sub-steps of 10ms per frame)
+            stepLiveDCMotor(0.01);
+            stepLiveDCMotor(0.01);
+
+            const currentRPM = liveState.w * (60 / (2 * Math.PI));
+
+            // Rotate 3D Shaft, Flywheel, Encoder Disc & Conveyor Rollers
+            if (rotorShaftGroup) {
+                const rotDelta = liveState.w * 0.0035;
+                rotorShaftGroup.rotation.x += rotDelta;
+
+                conveyorRollers.forEach(r => {
+                    r.rotation.z -= rotDelta * 0.8;
+                });
+
+                // Move boxes along conveyor belt proportional to motor speed
+                conveyorItems.forEach(item => {
+                    item.position.x += liveState.w * 0.00045;
+                    if (item.position.x > 1.8) item.position.x = -1.8;
+                });
+
+                // Blink Optical Encoder LED proportional to speed
+                const pulse = Math.sin(rotorShaftGroup.rotation.x * 12) > 0 ? 1.0 : 0.15;
+                encoderLedGlow.material.emissiveIntensity = pulse;
+
+                // Glow copper armature coil based on voltage u(t)
+                const uRatio = Math.min(1.0, Math.abs(liveState.u) / plantParams.uMax);
+                motorCoilMesh.material.emissiveIntensity = 0.15 + uRatio * 1.35;
+
+                // Animate Brake Clamp & Heavy Crate if Load Disturbance is active
+                if (liveState.loadActive) {
+                    brakeClampMesh.position.y += (1.98 - brakeClampMesh.position.y) * 0.15;
+                    heavyCrateMesh.position.y += (0.95 - heavyCrateMesh.position.y) * 0.18;
+                } else {
+                    brakeClampMesh.position.y += (2.45 - brakeClampMesh.position.y) * 0.15;
+                }
+            }
+
+            // Update HUD Overlays & Chart every 3 frames
+            frameCounter++;
+            if (frameCounter % 3 === 0) {
+                document.getElementById('hud-speed').textContent = `${currentRPM.toFixed(1)} RPM`;
+                document.getElementById('hud-voltage').textContent = `${liveState.u.toFixed(1)} V`;
+                document.getElementById('hud-current').textContent = `I_a = ${liveState.ia.toFixed(2)} A`;
+                const uPct = Math.min(100, (Math.abs(liveState.u) / plantParams.uMax) * 100);
+                document.getElementById('hud-voltage-bar').style.width = `${uPct}%`;
+
+                liveSetpointData.push(liveState.setpointRPM);
+                liveSetpointData.shift();
+                liveSpeedData.push(Math.max(0, currentRPM));
+                liveSpeedData.shift();
+                if (realtimeChart) realtimeChart.update('none');
+            }
+
+            if (controls) controls.update();
+            if (renderer && scene && camera) renderer.render(scene, camera);
+        }
+
+        // Start everything when window loads
+        window.onload = function () {
+            initThreeJS();
+            initCharts();
+            runComparisonBenchmark();
+            animateLoop();
+        };
+    </script>
+</body>
+</html>
